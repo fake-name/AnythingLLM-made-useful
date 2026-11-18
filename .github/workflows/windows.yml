@@ -23,8 +23,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      - run: ./scripts/prepare-vendor.ps1
       - run: npm run build
       - run: npm test
+        env:
+          TEST_RIPGREP_PATH: ${{ github.workspace }}\vendor\ripgrep\rg.exe
 
   package:
     needs: test
@@ -35,6 +38,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: ./scripts/prepare-vendor.ps1
       - run: npm run build
       - name: Create installable ZIP and checksum
         shell: pwsh

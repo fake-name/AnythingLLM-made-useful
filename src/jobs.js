@@ -13,32 +13,46 @@ function powershell(ctx) {
   if (process.platform !== "win32") throw new Error("Command execution targets Windows Desktop only.");
   return ctx.host?.runtimeArgs?.POWERSHELL_PATH || path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
+async function gitBash(ctx) {
+  const configured = ctx.host?.runtimeArgs?.GIT_BASH_PATH || process.env.CLAUDE_CODE_GIT_BASH_PATH;
+  const candidates = configured ? [configured] : [
+    path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe"),
+    path.join(process.env.LOCALAPPDATA || "C:\\Users\\Default\\AppData\\Local", "Programs", "Git", "bin", "bash.exe"),
+    ...String(process.env.PATH || "").split(path.delimiter).filter(p => /[\\/]Git[\\/](cmd|bin)[\\/]?$/i.test(p)).map(p => path.resolve(p, "..", "bin", "bash.exe"))
+  ];
+  for (const candidate of candidates) {
+    if (path.isAbsolute(candidate) && (await fs.stat(candidate).catch(() => null))?.isFile()) return candidate;
+  }
+  throw new Error("Git Bash was not found. Install Git for Windows or set GIT_BASH_PATH. Use PowerShell for native Windows commands.");
+}
 async function start(args, ctx) {
-  const executable = powershell(ctx);
+  const supervisor = powershell(ctx);
+  const shell = args.shell || "powershell";
+  const executable = shell === "bash" ? await gitBash(ctx) : supervisor;
   const command = string(args.command, "command");
   if (Buffer.byteLength(command) > 256 * 1024) throw new Error("Command script exceeds 256 KiB.");
   const cwd = await projects.resolve(args.project, args.cwd || ".", ctx);
   if (!(await fs.stat(cwd)).isDirectory()) throw new Error("cwd must be a directory.");
-  const timeout = integer(args.timeout_seconds, 0, 0, 86400, "timeout_seconds");
+  const timeout = args.timeout_ms === undefined ? integer(args.timeout_seconds, 0, 0, 86400, "timeout_seconds") * 1000 : integer(args.timeout_ms, 120000, 1, 7200000, "timeout_ms");
   const jobId = randomUUID(); const directory = jobDirectory(ctx, jobId);
   await fs.mkdir(directory, { recursive: true });
-  const request = { job_id: jobId, command, cwd, executable, timeout_seconds: timeout,
+  const request = { job_id: jobId, command, cwd, shell, executable, timeout_ms: timeout,
     max_log_bytes: 16 * 1024 * 1024, created_at: new Date().toISOString() };
   await writeJson(path.join(directory, "request.json"), request);
   // UTF-8 BOM is needed for non-ASCII source in Windows PowerShell 5.1.
-  await fs.writeFile(path.join(directory, "command.ps1"), "\uFEFF" + command, "utf8");
-  for (const name of ["run-job.ps1", "invoke-command.ps1"]) await fs.copyFile(path.join(__dirname, name), path.join(directory, name));
+  await fs.writeFile(path.join(directory, shell === "bash" ? "command.sh" : "command.ps1"), (shell === "bash" ? "" : "\uFEFF") + command, "utf8");
+  for (const name of ["run-job.ps1", "invoke-command.ps1", "invoke-command.sh"]) await fs.copyFile(path.join(__dirname, name), path.join(directory, name));
   const supervisorLog = await fs.open(path.join(directory, "supervisor.log"), "a");
   try {
-    const child = spawn(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(__dirname, "launch-job.ps1"), "-JobDirectory", directory, "-SupervisorExecutable", executable], {
+    const child = spawn(supervisor, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(__dirname, "launch-job.ps1"), "-JobDirectory", directory, "-SupervisorExecutable", supervisor], {
       cwd: process.env.SystemRoot || cwd, windowsHide: true, stdio: ["ignore", supervisorLog.fd, supervisorLog.fd]
     });
     await new Promise((resolve, reject) => {
       child.once("error", reject);
       child.once("exit", code => code === 0 ? resolve() : reject(new Error(`PowerShell launcher failed (${code}). Inspect ${directory}`)));
     });
-    return { job_id: jobId, state: "starting", cwd, directory, timeout_seconds: timeout,
-      message: "Started a detached PowerShell job. Poll job_status for output and completion; stop_job requests cancellation." };
+    return { job_id: jobId, state: "starting", cwd, directory, timeout_ms: timeout,
+      message: "Started a background shell task. Use TaskOutput to inspect progress and TaskStop to cancel." };
   } catch (error) {
     await writeJson(path.join(directory, "result.json"), { state: "failed", error: error.message, completed_at: new Date().toISOString() });
     throw error;
@@ -75,7 +89,7 @@ async function status(args, ctx) {
   const state = result?.state || (age > 15000 ? "unknown" : heartbeat ? "running" : "starting");
   return { job_id: args.job_id, cwd: request.cwd, created_at: request.created_at, state,
     ...(result || {}), stdout, stderr, directory,
-    ...(state === "unknown" ? { message: "No recent supervisor heartbeat. The process may have been interrupted. Inspect supervisor.log; do not assume success or blindly relaunch.", supervisor_log: (await fs.readFile(path.join(directory, "supervisor.log"), "utf8").catch(() => "")).slice(-8192) } : {}) };
+    ...(state === "unknown" ? { message: "No recent supervisor heartbeat. The process may have been interrupted. Inspect supervisor.log; do not assume success or blindly relaunch.", supervisor_log: (await Promise.all(["supervisor.log", "supervisor.stderr.log", "supervisor.stdout.log"].map(name => fs.readFile(path.join(directory, name), "utf8").catch(() => "")))).join("\n").slice(-8192) } : {}) };
 }
 async function run(args, ctx) {
   const timeout = integer(args.timeout_seconds, 60, 1, 600, "timeout_seconds");

@@ -26,7 +26,13 @@ try {
     $stderr = Join-Path $JobDirectory 'stderr.log'
     $wrapper = Join-Path $JobDirectory 'invoke-command.ps1'
     $commandFile = Join-Path $JobDirectory 'command.ps1'
-    $arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $wrapper + '" -CommandFile "' + $commandFile + '"'
+    $cwdFile = Join-Path $JobDirectory 'cwd.txt'
+    $arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $wrapper + '" -CommandFile "' + $commandFile + '" -CwdFile "' + $cwdFile + '"'
+    if ($request.shell -eq 'bash') {
+        $wrapper = (Join-Path $JobDirectory 'invoke-command.sh').Replace('\', '/')
+        $commandFile = (Join-Path $JobDirectory 'command.sh').Replace('\', '/')
+        $arguments = '--noprofile --norc "' + $wrapper + '" "' + $commandFile + '" "' + $cwdFile.Replace('\', '/') + '"'
+    }
     # ProcessStartInfo treats [] and other path characters literally. The
     # Start-Process cmdlet applies wildcard expansion to WorkingDirectory.
     $info = New-Object System.Diagnostics.ProcessStartInfo
@@ -51,8 +57,10 @@ try {
     $reason = 'completed'
     while (-not $child.HasExited) {
         if (Test-Path -LiteralPath (Join-Path $JobDirectory 'stop.request')) { $reason = 'cancelled'; break }
-        if ($request.timeout_seconds -gt 0 -and ([DateTime]::UtcNow - $started).TotalSeconds -ge $request.timeout_seconds) { $reason = 'timed_out'; break }
+        if ($request.timeout_ms -gt 0 -and ([DateTime]::UtcNow - $started).TotalMilliseconds -ge $request.timeout_ms) { $reason = 'timed_out'; break }
         if ($outFile.Length -gt $request.max_log_bytes -or $errFile.Length -gt $request.max_log_bytes) { $reason = 'output_limit'; break }
+        $outFile.Flush()
+        $errFile.Flush()
         Save-Json 'heartbeat.json' @{ updated_at = [DateTime]::UtcNow.ToString('o'); supervisor_pid = $PID; command_pid = $child.Id }
         Start-Sleep -Milliseconds 200
         $child.Refresh()

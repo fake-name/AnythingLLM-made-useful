@@ -1,4 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$CommandFile)
+param(
+    [Parameter(Mandatory=$true)][string]$CommandFile,
+    [string]$CwdFile
+)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -6,11 +9,14 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::InputEncoding = $utf8
 $OutputEncoding = $utf8
 $global:LASTEXITCODE = 0
+$code = 0
 try {
     & $CommandFile
-    if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }
-    exit 0
+    if ($null -ne $LASTEXITCODE) { $code = $LASTEXITCODE }
 } catch {
     [Console]::Error.WriteLine($_.ToString())
-    exit 1
+    $code = 1
+} finally {
+    if ($CwdFile) { [IO.File]::WriteAllText($CwdFile, (Get-Location).Path, $utf8) }
 }
+exit $code

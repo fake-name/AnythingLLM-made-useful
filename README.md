@@ -1,137 +1,95 @@
 # AnythingLLM made useful
 
-Project, file, image, PowerShell, background-job, and `SKILL.md` tools for **AnythingLLM Desktop on Windows**.
+Claude Code-style file, search, shell, background-task and skill tools for **AnythingLLM Desktop on Windows**. Designed around familiar tool calls for coding models such as Claude Opus.
 
 [![Windows tests and package](https://github.com/fake-name/AnythingLLM-made-useful/actions/workflows/windows.yml/badge.svg)](https://github.com/fake-name/AnythingLLM-made-useful/actions/workflows/windows.yml)
 
-No separate binary, Node installation, npm install, Rust toolchain, daemon, or listening port is needed on the user's machine. AnythingLLM's own Node runtime loads the plugins. Commands run in the Windows PowerShell 5.1 already included with Windows; PowerShell 7 can be configured optionally.
+The plugin runs in AnythingLLM's own Node runtime. No separate Node installation, npm install, custom Rust binary, daemon, or listening port is needed. The ZIP includes the official **ripgrep 15.2.0 Windows x64 executable** for search. PowerShell is included with Windows; `Bash` additionally requires [Git for Windows](https://gitforwindows.org/).
 
 ## Install
 
-1. Download the Windows ZIP from [Releases](https://github.com/fake-name/AnythingLLM-made-useful/releases), or the `windows-package` artifact from a successful [Actions run](https://github.com/fake-name/AnythingLLM-made-useful/actions/workflows/windows.yml). The Actions download contains the installable ZIP and its checksum.
-2. Extract the **entire installable ZIP** to a folder.
-3. Double-click **Install.cmd**. Run as your normal Windows user.
-4. Quit AnythingLLM using its system-tray menu and reopen it. Check **Settings > Agent Skills** for the `Made Useful:` tools and enable them for use. Depending on the installed version/provider, start your conversation with `@agent`.
+1. Download the Windows ZIP from [Releases](https://github.com/fake-name/AnythingLLM-made-useful/releases), or the `windows-package` artifact from a successful [Actions run](https://github.com/fake-name/AnythingLLM-made-useful/actions/workflows/windows.yml). The Actions artifact contains the installable ZIP and its checksum.
+2. Extract the **entire installable ZIP**.
+3. Double-click **Install.cmd**, as your normal Windows user.
+4. Quit AnythingLLM from its system tray and reopen it. Check **Settings > Agent Skills** and enable the tools for your agent. Depending on your version/provider, start the conversation with `@agent`.
 
-The installer uses `%APPDATA%\anythingllm-desktop\storage\plugins\agent-skills`. If your storage is elsewhere, use the app's **Open storage** command to find it, then run:
+The default destination is `%APPDATA%\anythingllm-desktop\storage\plugins\agent-skills`. Launch AnythingLLM once to create its storage folder. If you use another location, find it with the app's **Open storage** command and run:
 
 ```powershell
 .\Install.ps1 -StorageDirectory 'D:\AnythingLLM\storage'
 ```
 
-Launching AnythingLLM once creates its storage directory. Installation does not require administrator rights or download anything. The `.cmd` launcher sets execution policy for its one PowerShell process; it does not change the machine's policy. Organizational policies may still prevent scripts from running.
+Installation needs no administrator rights and downloads nothing. The launcher applies execution-policy bypass only to its own PowerShell process. The packaged ripgrep binary targets Windows x64; ARM64 is not yet validated.
 
 ## Tools
 
-Each row is a separate native AnythingLLM agent tool with its own parameter schema.
+These are separate tools with their own schemas, without a plugin prefix.
 
-| Tool | Behavior |
+| Tool | Arguments / purpose |
 | --- | --- |
-| `amu_list_projects` | List saved names and project directories. |
-| `amu_register_project` | Register an existing directory under a reusable name. |
-| `amu_forget_project` | Forget a registration without deleting project files. |
-| `amu_list_directory` | List files/folders with bounded recursion. |
-| `amu_read_file` | Read line ranges from UTF-8 text; return SHA-256. |
-| `amu_write_file` | Create or deliberately overwrite text, optionally checking SHA-256. |
-| `amu_edit_file` | Exact text replacement with an expected occurrence count. |
-| `amu_search_files` | Find literal filename/content matches recursively. |
-| `amu_view_image` | Attach a local image to the model's next turn. |
-| `amu_run_command` | Run PowerShell and wait for a bounded duration. |
-| `amu_start_command` | Start a detached PowerShell job and return its ID immediately. |
-| `amu_job_status` | Read state, exit code, and incremental stdout/stderr. |
-| `amu_stop_job` | Request cancellation of a job and its ordinary process tree. |
-| `amu_list_jobs` | Recover recent job IDs across chats/restarts. |
-| `amu_list_skills` | Discover project/user `SKILL.md` instructions. |
-| `amu_read_skill` | Load full skill instructions and their resource base directory. |
+| `Read` | `file_path`, optional `offset`, `limit`, `pages`, `allow_large`. Read UTF-8 text or attach an image. PDF rendering is not implemented. |
+| `Write` | `file_path`, `content`. Create or overwrite a file. Read an existing file first. |
+| `Edit` | `file_path`, `old_string`, `new_string`, optional `replace_all`. Exact replacement, with stale-read detection. |
+| `Glob` | `pattern`, optional `path`. Find files, newest first. |
+| `Grep` | `pattern`, optional `path`, filters, output mode and context. Real ripgrep regex search. |
+| `Bash` | `command`, optional `timeout`, `description`, `run_in_background`, `dangerouslyDisableSandbox`. Uses Git Bash. |
+| `PowerShell` | Same shell argument shape, using Windows PowerShell 5.1 or configured PowerShell 7. |
+| `TaskOutput` | `task_id`, optional `block`, `timeout`. Read output, status and exit code. |
+| `TaskStop` | `task_id` (or deprecated `shell_id`). Cancel a shell task and its normal child process tree. |
+| `Skill` | `skill`, optional `args`. Load a discovered SKILL.md workflow. |
+| `SetProject` | `project`: a registered name or absolute directory. Select the working directory. |
+| `ListProjects` | List registered projects and current directory. |
+| `RegisterProject` | `name`, `directory`. Save an existing directory under a name. |
+| `ForgetProject` | `name`. Remove a registration without deleting files. |
+| `ListSkills` | Discover project/user SKILL.md workflows and their descriptions. |
+| `ListTasks` | List persistent shell task IDs, optionally limited with `limit`. |
+
+The main input fields follow the published Claude Agent SDK. This is an independent implementation, with AnythingLLM JSON-string results and some narrower capabilities. See the [compatibility table](docs/compatibility.md) for exact limits and differences. No claims are made about any model's training data.
 
 ## Projects and files
 
-Try: “Register `C:\Users\me\source\example` as project `example`, list its files, and read README.md.”
+Try: “Register `C:\Users\me\work\example` as `example`, select it, then inspect the code and load any relevant skills.”
 
-Every file, command, and skill operation takes an explicit `project`: either a registered name or an absolute directory. Relative paths resolve from that directory. There is no process-wide `chdir` or shared “current project” for another chat to change accidentally. Names are case-insensitive; registration lists are shared by the Windows user. You can use absolute file paths and `~`/`%USERPROFILE%` paths as well.
+`SetProject` controls the default directory for shells, searches and skills. With current AnythingLLM invocation metadata, it persists separately for each workspace/user/thread. On older hosts without that metadata it lasts for the current agent invocation. `ListProjects` reports the selected directory. Files use absolute `file_path` arguments, just as Claude Code does. The default directory before selection is your home directory.
 
-Text reads and edits preserve UTF-8 BOMs and CRLF/LF line endings. `edit_file` requires an exact match, including line endings; its default expected occurrence count is one. `write_file` defaults to refusing existing files. For an overwrite, pass `overwrite: true` and preferably `expected_sha256` from a preceding read. The hash check catches changes already made by another writer; it is not an OS-wide file lock. Replacements are staged in a neighboring temporary file and renamed; filesystem hard-link relationships and custom per-file metadata are not guaranteed to survive replacement.
+`Read` defaults to 2000 lines and a 64 KiB text output cap, with `next_offset` for continuation. `allow_large` raises the output cap to 256 KiB. Text files are limited to 8 MiB. Writes create missing parent folders. Edits are exact, preserving CRLF/LF and bytes outside the replacement. Read existing files before changing them; the tool keeps a SHA-256 observation internally and rejects a stale edit. A new agent invocation must read them again.
 
-Text operations accept files up to 8 MiB; read output is limited to 64 KiB per call. Search scans at most 10,000 entries, searches content only in UTF-8 files up to 1 MiB, and skips `.git`, `node_modules`, `.venv`, `venv`, `dist`, `.next`, and directory links. For other encodings, binary data, huge files, or different search rules, use PowerShell. Directory creation, moves, copies, and deletion are also available through PowerShell; writing a file can create its parents directly.
+Project selection is a working directory, **not an access boundary**. File and shell tools run with your Windows account's access. There is no separate shell sandbox or per-command permission dialog added by this plugin.
 
-## Commands and background jobs
+## Shells and background tasks
 
-Try: “In project `example`, start `npm run dev` as a background job, then check its output.”
+Use `Bash` for Bash syntax and `PowerShell` for PowerShell syntax. Bash requires Git for Windows; the rest of the package works without Git. `GIT_BASH_PATH` on the Bash tool or the environment variable `CLAUDE_CODE_GIT_BASH_PATH` can specify `bash.exe`. Set `POWERSHELL_PATH` on a shell tool to an absolute `pwsh.exe` path to use PowerShell 7.
 
-Commands use PowerShell syntax. For cmd syntax, invoke `cmd.exe /d /c ...` explicitly. Each call starts a new, noninteractive PowerShell process; environment assignments and location changes do not persist between jobs. Scripts go into UTF-8 files rather than a giant command-line argument, supporting Unicode and multiline/large scripts.
+`timeout` is in **milliseconds**. Foreground commands default to 120000 ms, maximum 600000. Background commands default to 1800000 ms, maximum 7200000. Start a long task with `run_in_background: true`; the response includes `backgroundTaskId`, `stdout_file`, and `stderr_file`. Poll with `TaskOutput`, or use `Read` on those output files. Use `TaskStop` to cancel it. `TaskOutput` is retained for compatibility with earlier Claude Code versions; current Claude Code uses `Read` on background output files.
 
-`run_command` defaults to a 60-second timeout (maximum 600 seconds). `start_command` defaults to no deadline, with an optional timeout up to 24 hours. Both produce persistent job IDs. A detached supervisor writes state and log files independently of the tool invocation. Closing a chat does not request cancellation. A Windows reboot ends processes; stale records report `unknown`, not success.
+Always check `state` and `exit_code`. A successfully launched or successfully polled task may have failed. A stale supervisor reports `unknown`, never success. Logs and task records survive AnythingLLM restarts; normal background tasks survive their launching Node process exiting. Rebooting Windows ends the processes. Cancellation/timeout use `taskkill /T`; deliberately reparented or escaped processes are outside that guarantee.
 
-Poll `job_status` using `stdout.next_offset` and `stderr.next_offset` as the next call's `stdout_offset` and `stderr_offset`. The cursors are **byte offsets**. Default output is 32 KiB per stream per call. `stop_job` returns `stop_requested`; poll again to confirm `cancelled` or another final result. Cancellation and timeouts terminate the normal child process tree using Windows `taskkill /T`; programs that deliberately escape/reparent their process trees are outside this guarantee.
+Foreground working-directory changes persist; environment variables and shell functions do not. Background directory changes do not alter the conversation's directory. The supervisor monitors each output stream for a 16 MiB limit; a burst can overshoot it. Output is bounded in tool responses, with complete captured logs available through the returned paths. Commands and logs are retained until you remove them.
 
-The supervisor checks log sizes every 200 ms and stops the job if either stream exceeds 16 MiB. A burst can overshoot that threshold. Scripts, logs, results, and installer backups are retained until you remove them; there is no automatic retention cleanup in v0.1. Set `POWERSHELL_PATH` on the two command tools to an absolute `pwsh.exe` path to use PowerShell 7 instead of 5.1.
+## Images and skills
 
-## Image viewing
+`Read` attaches PNG, JPEG, GIF or WebP images up to 8 MiB through AnythingLLM's image channel. The model needs vision support. Unsupported AnythingLLM versions return a clear attachment error. PDF rendering and notebook rendering are not included; notebook files can be read as JSON.
 
-`view_image` uses AnythingLLM's `this.super.addToolAttachment()` channel. The image is attached for the model's next turn; its base64 is never returned as tool-result prose. It accepts PNG, JPEG, GIF, or WebP up to 8 MiB, and checks the file signature. Convert other formats first.
+`ListSkills` scans `<project>/.agents/skills`, `<project>/.claude/skills`, and the same two directories under your home folder. Each workflow lives in `<name>/SKILL.md`. Project skills take precedence over user skills with the same name. `Skill({skill, args})` loads the full instructions, substitutes `$ARGUMENTS`, and returns the base directory for relative resources. The model can then read referenced files and run scripts with the appropriate tools. Loading a skill does not automatically execute its scripts or implement Claude Code's skill-specific hooks or permission policies.
 
-This needs a vision-capable agent model/provider and an AnythingLLM build exposing that attachment hook. The tool reports an explicit compatibility error on older builds. The hook is present in current upstream agent code, but it is an internal API rather than a stable custom-skill API. The model/provider controls which image formats it accepts and whether animated images are supported. No external image service is called by the plugin itself.
+## Upgrades and removal
 
-## SKILL.md workflows
+Run the new ZIP's `Install.cmd` to upgrade. Settings and active states are preserved; replaced plugins and old `amu_` plugins are backed up under `storage/plugins/anythingllm-made-useful/backups`. The installer checks every generic tool name first and refuses a collision with an unrelated plugin.
 
-Skill discovery checks these directories, looking one level down for `<skill>/SKILL.md`:
+Run `Uninstall.cmd` to remove this package's tools. It preserves project files, registrations, logs, backups, support files, and running jobs. Stop tasks before uninstalling if you want them to terminate.
 
-| Scope | Directories |
-| --- | --- |
-| Project | `<project>\.agents\skills`, `<project>\.claude\skills` |
-| User | `%USERPROFILE%\.agents\skills`, `%USERPROFILE%\.claude\skills` |
-
-`list_skills` returns names, description previews, scope, and paths. `read_skill` returns the full Markdown unchanged and the directory to use when resolving references such as `scripts/check.ps1` or `references/details.md`. The existing read/file/command tools can access those resources. The preview extractor handles common scalar and block-string frontmatter; it is not a full YAML parser, and full instructions remain available if metadata is unusual.
-
-These are instruction documents, distinct from AnythingLLM's “agent skills,” which are the actual JavaScript tools installed by this package. Discovery is on demand; installing this does not automatically inject every skill into every chat. You can install a skill by copying its folder into one of the listed locations, or use the shell/file tools to create it.
-
-Suggested workspace instructions:
-
-```text
-Use the Made Useful tools for local work. Specify the project explicitly in every call.
-At the start of a task, discover available SKILL.md skills and read relevant ones.
-Resolve a skill's relative resources from the base_directory returned by read_skill.
-Use dedicated file/image tools when suitable; use PowerShell for other operations.
-Run long-lived commands with start_command and keep their job IDs.
-Check job state and exit code before saying a command succeeded.
-When editing, read first, preserve line endings, and use the returned SHA-256.
-```
-
-## Execution context and state
-
-The tools run with the same Windows account and permissions as AnythingLLM. Project directories are working-directory conveniences, **not a sandbox**; the command tool can access anything that account can. The built-in AnythingLLM filesystem tool's allowed-folder list does not govern these custom tools. No extra per-call approval UI is implemented by this package. File contents and images returned to the agent go to its configured model provider, just like other agent inputs.
-
-State defaults to `<AnythingLLM storage>\plugins\anythingllm-made-useful`, separate from individual installed tool folders. It contains `projects`, `jobs`, and upgrade `backups`. An optional `STATE_DIRECTORY` setting overrides this; set the same absolute path on all Made Useful tools.
-
-Rerun the installer to upgrade. It preserves each tool's enabled state and configuration values, keeps the old version in a timestamped backup, and leaves state/project files intact. Run `Uninstall.cmd` to remove the tools. Stop background jobs first if desired; uninstall does not terminate them or delete state/project files.
+State defaults to `storage/plugins/anythingllm-made-useful`. `STATE_DIRECTORY` can override it; use the same absolute value on all tools. `DEFAULT_DIRECTORY` sets the initial working directory. Search tools can override the bundled executable with `RIPGREP_PATH`.
 
 ## Build and test
 
-Development requires Node 18+ and Windows for PowerShell integration tests. There are no npm dependencies.
+On Windows with Node 18 or newer:
 
 ```powershell
+.\scripts\prepare-vendor.ps1
 npm run build
 npm test
-$version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-Compress-Archive -Path "dist\AnythingLLM-made-useful-$version-windows" -DestinationPath "dist\AnythingLLM-made-useful-$version-windows.zip" -Force
 ```
 
-The build generates one self-contained plugin folder per tool and includes the installers and checksums. Common JavaScript is copied into each tool so the normal AnythingLLM loader can load each independently. Source stays in `src`; do not hand-edit generated `dist` files.
+The vendor preparation script downloads a pinned official ripgrep archive and verifies its SHA-256 before extraction. Its licenses are included in the package. There are no npm runtime dependencies. Windows Actions test Node 18 and 24, exercise shell execution, Unicode and literal paths, parent exit, cancellation, installer upgrades and API behavior, then produce the ZIP and checksums. A tag matching `package.json` (for example `v0.1.0`) publishes the release after those checks pass.
 
-The Windows GitHub Actions workflow builds and runs tests on Node 18 and 24, including real PowerShell launches, Unicode/paths, exit codes, timeouts, cancellation, installation, and upgrade/uninstall behavior. It then creates an installable ZIP and SHA-256 file. On a `v*` tag matching `package.json`, it also publishes a GitHub Release with those assets. To release:
-
-```powershell
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Local non-Windows runs skip Windows integration tests. The test suite exercises the attachment contract with a fake agent host; live model behavior and the AnythingLLM Desktop UI require an application smoke test.
-
-## References
-
-- [AnythingLLM custom skill guide](https://docs.anythingllm.com/agent/custom/developer-guide)
-- [Manifest reference](https://docs.anythingllm.com/agent/custom/plugin-json)
-- [Handler reference](https://docs.anythingllm.com/agent/custom/handler-js)
-- [Windows Desktop storage location](https://docs.anythingllm.com/installation-desktop/storage)
-- [Upstream image attachment implementation](https://github.com/Mintplex-Labs/anything-llm/blob/master/server/utils/agents/aibitat/index.js)
-- [Upstream filesystem image use](https://github.com/Mintplex-Labs/anything-llm/blob/master/server/utils/agents/aibitat/plugins/filesystem/read-text-file.js)
+Linux can run the platform-independent tests with ripgrep installed; Windows tests are skipped there. Automated tests use an AnythingLLM host fixture. Actual Desktop/provider integration, especially the internal image hook, still needs a first install check against your deployed version.

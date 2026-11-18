@@ -43,7 +43,7 @@ test("Windows: Unicode, quoted paths, stdout/stderr, and native exit codes", { s
   const a = await f.start({ command: "Write-Output 'héllo 日本語'; [Console]::Error.WriteLine('error stream'); Write-Output (Get-Location).Path; & $env:ComSpec /d /c exit 7" });
   const result = await f.wait(a.job_id);
   assert.equal(result.state, "failed", JSON.stringify(result)); assert.equal(result.exit_code, 7);
-  assert.match(result.stdout.text, /héllo 日本語/); assert.ok(result.stdout.text.includes(f.project));
+  assert.match(result.stdout.text, /héllo 日本語/); assert.ok(result.stdout.text.toLowerCase().includes((await fs.realpath(f.project)).toLowerCase()), result.stdout.text);
   assert.match(result.stderr.text, /error stream/);
 });
 test("Windows: detached jobs return before completion and can be polled with a fresh handler", { skip: !win, timeout: 60000 }, async (t) => {
@@ -96,7 +96,7 @@ test("Windows: installer, upgrade preservation, and uninstall in a disposable st
   const storage = path.join(f.root, "storage spaces [x]"); await fs.mkdir(storage);
   const install = () => execFileSync(ps, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(bundle, "Install.ps1"), "-StorageDirectory", storage], { encoding: "utf8" });
   install();
-  const plugin = path.join(storage, "plugins", "agent-skills", "amu_run_command");
+  const plugin = path.join(storage, "plugins", "agent-skills", "PowerShell");
   const manifestPath = path.join(plugin, "plugin.json");
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   manifest.active = false; manifest.setup_args.POWERSHELL_PATH.value = "C:\\custom\\pwsh.exe";
@@ -105,10 +105,47 @@ test("Windows: installer, upgrade preservation, and uninstall in a disposable st
   const upgraded = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   assert.equal(upgraded.active, false); assert.equal(upgraded.setup_args.POWERSHELL_PATH.value, "C:\\custom\\pwsh.exe");
   const defaultState = path.join(storage, "plugins", "anythingllm-made-useful");
-  const runtime = require(path.join(storage, "plugins", "agent-skills", "amu_register_project", "handler.js")).runtime;
+  const runtime = require(path.join(storage, "plugins", "agent-skills", "RegisterProject", "handler.js")).runtime;
   assert.equal(JSON.parse(await runtime.handler.call({}, { name: "test", directory: f.project })).ok, true);
   assert.ok(await fs.stat(path.join(defaultState, "projects", "test.json")));
   execFileSync(ps, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(bundle, "Uninstall.ps1"), "-StorageDirectory", storage]);
   await assert.rejects(fs.stat(plugin), { code: "ENOENT" });
   assert.ok(await fs.stat(path.join(defaultState, "projects", "test.json")));
+});
+test("Windows: public Bash and PowerShell APIs use actual shells and persist foreground cwd", { skip: !win, timeout: 60000 }, async (t) => {
+  const f = await fixture(t);
+  const call = (name, args) => f.call(`agent.${name}`, args);
+  await call("SetProject", { project: f.project });
+  await fs.mkdir(path.join(f.project, "sub folder"));
+  const bash = await call("Bash", { command: "printf 'bash:%s\\n' \"$BASH_VERSION\"; printf 'err\\n' >&2; cd 'sub folder'", timeout: 10000 });
+  assert.equal(bash.state, "completed", JSON.stringify(bash)); assert.match(bash.stdout, /bash:[0-9]/); assert.match(bash.stderr, /err/);
+  const selected = await call("ListProjects", {});
+  assert.equal(selected.current_directory.toLowerCase(), (await fs.realpath(path.join(f.project, "sub folder"))).toLowerCase());
+  const psResult = await call("PowerShell", { command: "Write-Output $PSVersionTable.PSEdition; Set-Location -LiteralPath '..'", timeout: 10000 });
+  assert.equal(psResult.state, "completed", JSON.stringify(psResult)); assert.match(psResult.stdout, /Desktop/);
+  assert.equal((await call("ListProjects", {})).current_directory.toLowerCase(), (await fs.realpath(f.project)).toLowerCase());
+  const background = await call("Bash", { command: "printf 'started\\n'; sleep 2; printf 'finished\\n'", run_in_background: true, timeout: 10000 });
+  assert.ok(background.backgroundTaskId, JSON.stringify(background));
+  const result = await call("TaskOutput", { task_id: background.backgroundTaskId, block: true, timeout: 10000 });
+  assert.equal(result.state, "completed", JSON.stringify(result)); assert.match(result.stdout, /started[\s\S]*finished/);
+  const waiting = await call("PowerShell", { command: "Start-Sleep -Seconds 30", run_in_background: true, timeout: 40000 });
+  const stopped = await call("TaskStop", { task_id: waiting.task_id });
+  assert.equal(stopped.state, "cancelled", JSON.stringify(stopped));
+});
+test("Windows: installer migrates legacy tools and refuses generic-name collisions", { skip: !win, timeout: 60000 }, async (t) => {
+  const f = await fixture(t);
+  const bundle = path.resolve(__dirname, "..", "dist", `AnythingLLM-made-useful-${require("../package.json").version}-windows`);
+  const storage = path.join(f.root, "storage");
+  const legacy = path.join(storage, "plugins", "agent-skills", "amu_read_file"); await fs.mkdir(legacy, { recursive: true });
+  await fs.writeFile(path.join(legacy, "plugin.json"), JSON.stringify({ hubId: "amu_read_file", name: "Made Useful: Read file", active: false, setup_args: {} }));
+  const install = () => execFileSync(ps, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(bundle, "Install.ps1"), "-StorageDirectory", storage], { encoding: "utf8" });
+  install();
+  const read = path.join(storage, "plugins", "agent-skills", "Read", "plugin.json");
+  assert.equal(JSON.parse(await fs.readFile(read, "utf8")).active, false);
+  await assert.rejects(fs.stat(legacy), { code: "ENOENT" });
+  assert.ok(await fs.stat(path.join(storage, "plugins", "anythingllm-made-useful", "bin", "rg.exe")));
+  const other = { hubId: "Read", name: "Someone else's Read", active: true };
+  await fs.writeFile(read, JSON.stringify(other));
+  assert.throws(install, /already used by another plugin/);
+  assert.deepEqual(JSON.parse(await fs.readFile(read, "utf8")), other);
 });
