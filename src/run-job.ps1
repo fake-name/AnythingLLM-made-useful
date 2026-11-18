@@ -6,7 +6,9 @@ function Save-Json([string]$Name, $Value) {
     $file = Join-Path $JobDirectory $Name
     $temp = $file + '.tmp'
     [IO.File]::WriteAllText($temp, ($Value | ConvertTo-Json -Depth 8 -Compress), $utf8)
-    if ([IO.File]::Exists($file)) { [IO.File]::Replace($temp, $file, $null) }
+    # PowerShell 5.1 coerces $null string arguments to an empty path. Use a
+    # concrete backup path while atomically replacing the live status file.
+    if ([IO.File]::Exists($file)) { [IO.File]::Replace($temp, $file, ($file + '.previous')) }
     else { [IO.File]::Move($temp, $file) }
 }
 function Stop-CommandTree($Process) {
