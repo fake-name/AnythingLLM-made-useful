@@ -1,0 +1,12 @@
+{
+  "name": "anythingllm-made-useful",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Project, file, image, PowerShell job, and SKILL.md tools for AnythingLLM Desktop on Windows",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test",
+    "build": "node scripts/build.js"
+  }
+}
