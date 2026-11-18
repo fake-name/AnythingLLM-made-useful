@@ -11,7 +11,7 @@ async function fixture(t) {
   const project = path.join(root, "project [one] é"); await fs.mkdir(project);
   const attachments = [];
   const runtimeArgs = { STATE_DIRECTORY: path.join(root, "state"), DEFAULT_DIRECTORY: project,
-    RIPGREP_PATH: process.env.TEST_RIPGREP_PATH || "rg" };
+    RIPGREP_PATH: process.env.TEST_RIPGREP_PATH || (process.platform === "win32" ? path.resolve(__dirname, "../vendor/ripgrep/rg.exe") : "rg") };
   const host = { runtimeArgs, super: { handlerProps: { invocation: { workspace_id: 1, user_id: 2, thread_id: 3 } }, addToolAttachment: a => attachments.push(a) } };
   const call = async (name, args = {}, instance = host) => JSON.parse(await makeRuntime(`agent.${name}`).handler.call(instance, args));
   return { project, root, host, call, attachments };
