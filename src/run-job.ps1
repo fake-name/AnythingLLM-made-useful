@@ -6,7 +6,8 @@ function Save-Json([string]$Name, $Value) {
     $file = Join-Path $JobDirectory $Name
     $temp = $file + '.tmp'
     [IO.File]::WriteAllText($temp, ($Value | ConvertTo-Json -Depth 8 -Compress), $utf8)
-    Move-Item -LiteralPath $temp -Destination $file -Force
+    if ([IO.File]::Exists($file)) { [IO.File]::Replace($temp, $file, $null) }
+    else { [IO.File]::Move($temp, $file) }
 }
 function Stop-CommandTree($Process) {
     if ($null -ne $Process -and -not $Process.HasExited) {
@@ -27,7 +28,8 @@ try {
     $wrapper = Join-Path $JobDirectory 'invoke-command.ps1'
     $commandFile = Join-Path $JobDirectory 'command.ps1'
     $cwdFile = Join-Path $JobDirectory 'cwd.txt'
-    $arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $wrapper + '" -CommandFile "' + $commandFile + '" -CwdFile "' + $cwdFile + '"'
+    $workingDirectory = [IO.Path]::Combine($request.cwd, '.')
+    $arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $wrapper + '" -CommandFile "' + $commandFile + '" -CwdFile "' + $cwdFile + '" -WorkingDirectory "' + $workingDirectory + '"'
     if ($request.shell -eq 'bash') {
         $wrapper = (Join-Path $JobDirectory 'invoke-command.sh').Replace('\', '/')
         $commandFile = (Join-Path $JobDirectory 'command.sh').Replace('\', '/')

@@ -1,6 +1,6 @@
 "use strict";
 const os = require("node:os");
-const { path, hash, readJson, writeJson } = require("./common");
+const { fs, path, hash, readJson, writeJson } = require("./common");
 const key = Symbol.for("AnythingLLM-made-useful.session");
 async function session(ctx) {
   const owner = ctx.host?.super || ctx.host;
@@ -20,6 +20,7 @@ async function session(ctx) {
 }
 async function select(ctx, cwd) {
   const state = await session(ctx);
+  cwd = await fs.realpath(cwd);
   state.cwd = cwd; state.generation++;
   if (state.file) await writeJson(state.file, { cwd });
   return state;

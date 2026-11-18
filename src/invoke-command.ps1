@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$CommandFile,
-    [string]$CwdFile
+    [string]$CwdFile,
+    [string]$WorkingDirectory
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -11,6 +12,9 @@ $OutputEncoding = $utf8
 $global:LASTEXITCODE = 0
 $code = 0
 try {
+    # PowerShell 5.1 can fall back to PSHOME when the native initial directory
+    # contains wildcard characters. Establish its provider location explicitly.
+    if ($WorkingDirectory) { Set-Location -LiteralPath $WorkingDirectory }
     & $CommandFile
     if ($null -ne $LASTEXITCODE) { $code = $LASTEXITCODE }
 } catch {

@@ -104,7 +104,7 @@ async function TaskStop(args, ctx) {
 }
 async function SetProject(args, ctx) {
   const cwd = await projects.root(args.project, ctx); const state = await select(ctx, cwd);
-  return { directory: cwd, persistence: state.file ? "conversation" : "agent invocation" };
+  return { directory: state.cwd, persistence: state.file ? "conversation" : "agent invocation" };
 }
 async function ListProjects(args, ctx) { return { ...await projects.list(args, ctx), current_directory: (await session(ctx)).cwd }; }
 async function ListSkills(args, ctx) { return skills.list({ project: (await session(ctx)).cwd }, ctx); }
