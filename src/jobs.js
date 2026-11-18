@@ -31,7 +31,9 @@ async function start(args, ctx) {
   const supervisorLog = await fs.open(path.join(directory, "supervisor.log"), "a");
   try {
     const child = spawn(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(directory, "run-job.ps1"), "-JobDirectory", directory], {
-      cwd, detached: true, windowsHide: true, stdio: ["ignore", supervisorLog.fd, supervisorLog.fd]
+      // Windows PowerShell exits silently with libuv's DETACHED_PROCESS flag.
+      // File-backed stdio plus unref keeps the job independent of Node's lifetime.
+      cwd, detached: false, windowsHide: true, stdio: ["ignore", supervisorLog.fd, supervisorLog.fd]
     });
     await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
     child.once("exit", async (code, signal) => {
