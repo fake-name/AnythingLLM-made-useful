@@ -30,23 +30,13 @@ async function start(args, ctx) {
   for (const name of ["run-job.ps1", "invoke-command.ps1"]) await fs.copyFile(path.join(__dirname, name), path.join(directory, name));
   const supervisorLog = await fs.open(path.join(directory, "supervisor.log"), "a");
   try {
-    const child = spawn(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(directory, "run-job.ps1"), "-JobDirectory", directory], {
-      // Windows PowerShell exits silently with libuv's DETACHED_PROCESS flag.
-      // File-backed stdio plus unref keeps the job independent of Node's lifetime.
-      cwd, detached: false, windowsHide: true, stdio: ["ignore", supervisorLog.fd, supervisorLog.fd]
+    const child = spawn(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(__dirname, "launch-job.ps1"), "-JobDirectory", directory, "-SupervisorExecutable", executable], {
+      cwd: process.env.SystemRoot || cwd, windowsHide: true, stdio: ["ignore", supervisorLog.fd, supervisorLog.fd]
     });
-    await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
-    child.once("exit", async (code, signal) => {
-      try {
-        if (!await readJson(path.join(directory, "result.json"), null)) {
-          const details = await fs.readFile(path.join(directory, "supervisor.log"), "utf8").catch(() => "");
-          await writeJson(path.join(directory, "result.json"), { state: "failed", exit_code: code,
-            error: `Job supervisor exited without a result (${signal || code}). ${details.slice(-8192)}`,
-            completed_at: new Date().toISOString() });
-        }
-      } catch { /* Status also detects stale heartbeats if the app is closing. */ }
+    await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", code => code === 0 ? resolve() : reject(new Error(`PowerShell launcher failed (${code}). Inspect ${directory}`)));
     });
-    child.unref();
     return { job_id: jobId, state: "starting", cwd, directory, timeout_seconds: timeout,
       message: "Started a detached PowerShell job. Poll job_status for output and completion; stop_job requests cancellation." };
   } catch (error) {
