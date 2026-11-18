@@ -25,7 +25,7 @@ async function fixture(t) {
 }
 test("project aliases are persistent, case-normalized, and independent across calls", async (t) => {
   const { project, call } = await fixture(t);
-  assert.equal((await call("projects.register", { name: "Example", directory: project })).directory, project);
+  assert.equal((await call("projects.register", { name: "Example", directory: project })).directory, await fs.realpath(project));
   assert.equal((await call("projects.list", {})).projects[0].name, "example");
   assert.equal((await call("files.write", { project: "EXAMPLE", path: "a.txt", content: "test" })).ok, true);
   assert.equal((await call("projects.forget", { name: "example" })).files_deleted, false);

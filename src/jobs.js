@@ -34,6 +34,16 @@ async function start(args, ctx) {
       cwd, detached: true, windowsHide: true, stdio: ["ignore", supervisorLog.fd, supervisorLog.fd]
     });
     await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+    child.once("exit", async (code, signal) => {
+      try {
+        if (!await readJson(path.join(directory, "result.json"), null)) {
+          const details = await fs.readFile(path.join(directory, "supervisor.log"), "utf8").catch(() => "");
+          await writeJson(path.join(directory, "result.json"), { state: "failed", exit_code: code,
+            error: `Job supervisor exited without a result (${signal || code}). ${details.slice(-8192)}`,
+            completed_at: new Date().toISOString() });
+        }
+      } catch { /* Status also detects stale heartbeats if the app is closing. */ }
+    });
     child.unref();
     return { job_id: jobId, state: "starting", cwd, directory, timeout_seconds: timeout,
       message: "Started a detached PowerShell job. Poll job_status for output and completion; stop_job requests cancellation." };
@@ -73,7 +83,7 @@ async function status(args, ctx) {
   const state = result?.state || (age > 15000 ? "unknown" : heartbeat ? "running" : "starting");
   return { job_id: args.job_id, cwd: request.cwd, created_at: request.created_at, state,
     ...(result || {}), stdout, stderr, directory,
-    ...(state === "unknown" ? { message: "No recent supervisor heartbeat. The process may have been interrupted. Inspect supervisor.log; do not assume success or blindly relaunch." } : {}) };
+    ...(state === "unknown" ? { message: "No recent supervisor heartbeat. The process may have been interrupted. Inspect supervisor.log; do not assume success or blindly relaunch.", supervisor_log: (await fs.readFile(path.join(directory, "supervisor.log"), "utf8").catch(() => "")).slice(-8192) } : {}) };
 }
 async function run(args, ctx) {
   const timeout = integer(args.timeout_seconds, 60, 1, 600, "timeout_seconds");
