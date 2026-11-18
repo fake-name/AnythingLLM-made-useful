@@ -30,6 +30,8 @@ AnythingLLM custom handlers return **JSON strings**, not Claude Code's exact out
 
 Required fields and enum values are exported through the runtime's `parameters` schema; manifest parameters contain the simpler scalar descriptors AnythingLLM accepts. No conversation examples are injected.
 
+Windows PowerShell 5.1 retains its native path quirks: relative `Set-Location -LiteralPath '..'` can fail inside bracketed directory names. Use an absolute `-LiteralPath` (for example `[IO.Directory]::GetParent((Get-Location).Path).FullName`). The wrapper explicitly initializes an absolute literal working directory; it does not replace PowerShell's built-in commands.
+
 ## State and permissions
 
 Project selection is saved under a hash of AnythingLLM's workspace/user/thread identifiers when its invocation metadata supplies them. Otherwise it lasts for the current agent invocation. File-read observations last only for the agent invocation: after restarting it, Read existing files again before Edit/Write. Separate threads do not share selected directories or read observations. No process-wide `chdir` is used.

@@ -121,7 +121,9 @@ test("Windows: public Bash and PowerShell APIs use actual shells and persist for
   assert.equal(bash.state, "completed", JSON.stringify(bash)); assert.match(bash.stdout, /bash:[0-9]/); assert.match(bash.stderr, /err/);
   const selected = await call("ListProjects", {});
   assert.equal(selected.current_directory.toLowerCase(), (await fs.realpath(path.join(f.project, "sub folder"))).toLowerCase());
-  const psResult = await call("PowerShell", { command: "Write-Output $PSVersionTable.PSEdition; Set-Location -LiteralPath '..'", timeout: 10000 });
+  // PowerShell 5.1 mis-resolves relative -LiteralPath '..' under bracketed
+  // directories. Use its supported absolute-literal form; do not emulate cd.
+  const psResult = await call("PowerShell", { command: "Write-Output $PSVersionTable.PSEdition; Set-Location -LiteralPath ([IO.Directory]::GetParent((Get-Location).Path).FullName)", timeout: 10000 });
   assert.equal(psResult.state, "completed", JSON.stringify(psResult)); assert.match(psResult.stdout, /Desktop/);
   assert.equal((await call("ListProjects", {})).current_directory.toLowerCase(), (await fs.realpath(f.project)).toLowerCase());
   const background = await call("Bash", { command: "printf 'started\\n'; sleep 2; printf 'finished\\n'", run_in_background: true, timeout: 10000 });
